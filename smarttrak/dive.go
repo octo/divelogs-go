@@ -4,6 +4,8 @@ package smarttrak
 import (
 	"encoding/binary"
 	"fmt"
+	"io"
+	"log"
 	"time"
 )
 
@@ -43,16 +45,21 @@ type Dive struct {
 	TankWarning     float64
 	TankReserve     float64
 	Profile         []DataPoint
+	PercentO2       int
+	PercentHE       int
 
 	// Unparsed
 	WorkSensitivity uint16
 	DesatBefore     uint16
+	featureSet      uint32
 	settings1       settings1
 	settings2       uint32
 
 	// Not certain
-	percentO2 int
-	maxPO2    float64
+	maxPO2 float64
+
+	// internal
+	timeseriesSize uint16
 }
 
 // DataPoint holds timeseries data points.
@@ -86,10 +93,37 @@ func (d DataPoint) State() string {
 	return ret
 }
 
-// ParseDive parses the binary data contained in an .asd file.
+func ReadDive(r io.Reader) (*Dive, error) {
+	data, err := readExact(r, 195)
+	if err != nil {
+		return nil, err
+	}
+	dive, err := ParseDive(data)
+	if err != nil {
+		return nil, err
+	}
+
+	data, err = readExact(r, int(dive.timeseriesSize))
+	if err != nil {
+		return nil, err
+	}
+
+	if err := dive.parseTimeseriesBlock(data); err != nil {
+		return nil, err
+	}
+
+	_, err = readExact(r, 8)
+	if err != nil {
+		return nil, err
+	}
+
+	return dive, nil
+}
+
+// ParseDive parses the
 func ParseDive(data []byte) (*Dive, error) {
-	if len(data) < 316 {
-		return nil, fmt.Errorf("not enough data")
+	if got, want := len(data), 195; got != want {
+		return nil, fmt.Errorf("unexpected size: got %d, want %d", got, want)
 	}
 
 	le := binary.LittleEndian
@@ -100,9 +134,10 @@ func ParseDive(data []byte) (*Dive, error) {
 		DeviceID:        le.Uint32(data[8:]),
 		Sequence:        int(le.Uint16(data[28:])),
 		Time:            parseTime(data[16:]),
-		Duration:        time.Duration(le.Uint16(data[44:])) * time.Minute,
-		SurfaceInterval: time.Duration(le.Uint16(data[50:])) * time.Minute,
-		TimeLimit:       time.Duration(le.Uint16(data[33:])) * time.Minute,
+		Duration:        parseDurationMin(le.Uint16(data[44:])),
+		SurfaceInterval: parseDurationMin(le.Uint16(data[50:])),
+		TimeLimit:       parseDurationMin(le.Uint16(data[33:])),
+		featureSet:      le.Uint32(data[35:]),
 		AirTemperature:  parseTemperature(le.Uint16(data[30:])),
 		DecoTemperature: parseTemperature(le.Uint16(data[70:])),
 		MinTemperature:  parseTemperature(le.Uint16(data[46:])),
@@ -121,17 +156,67 @@ func ParseDive(data []byte) (*Dive, error) {
 		settings1:       s1,
 		settings2:       le.Uint32(data[167:]),
 		// not certain
-		percentO2: int(le.Uint16(data[48:])),
-		maxPO2:    float64(le.Uint16(data[60:])) / 1000.0,
+		maxPO2:         float64(le.Uint16(data[60:])) / 1000.0,
+		timeseriesSize: le.Uint16(data[191:]),
 	}
 
-	if err := dive.parseTimeseries(data[316:]); err != nil {
-		return nil, err
-	}
 	return dive, nil
 }
 
-func (d *Dive) parseTimeseries(data []byte) error {
+func (d *Dive) parseTimeseriesBlock(data []byte) error {
+	for i := 0; i < len(data); i++ {
+		b := data[i]
+
+		switch {
+		case b == 0xf0:
+			log.Printf("0xF0 => %d", data[i+1])
+			i += 1
+		case b == 0xf2:
+			log.Printf("0xF2 => %d", data[i+1])
+			i += 1
+		case b == 0xf3:
+			log.Printf("0xF3 => %d", binary.LittleEndian.Uint16(data[i+1:]))
+			i += 2
+		case b == 0xf4:
+			log.Printf("0xF4 => %d", binary.LittleEndian.Uint16(data[i+1:]))
+			i += 2
+		case b == 0xf8:
+			log.Printf("0xF8 => %d", binary.LittleEndian.Uint32(data[i+1:]))
+			i += 4
+		case b == 0xf9:
+			log.Printf("0xF9 => %d", data[i+1])
+			i += 1
+		case b == 0xfa:
+			len, err := d.parseTimeseries(data[i+1:])
+			if err != nil {
+				return err
+			}
+			i += len
+		case b == 0xfb:
+			len := int(data[i+1])
+			switch typ := int(data[i+2]); typ {
+			case 32:
+				pctO2 := binary.LittleEndian.Uint16(data[i+3:])
+				pctHE := binary.LittleEndian.Uint16(data[i+5:])
+				d.PercentO2 = int(pctO2)
+				d.PercentHE = int(pctHE)
+				log.Printf("Mixture: %d%% O₂, %d%% He", pctO2, pctHE)
+				log.Printf("Maybe max pO₂: %d", binary.LittleEndian.Uint16(data[i+11:]))
+			case 26:
+				log.Printf("NOSTOPMIN:   %d", data[i+3])
+				log.Printf("NOSTOPMBMIN: %d", data[i+4])
+			default:
+				log.Printf("Unknown block: type %d, payload %d bytes", typ, len-2)
+			}
+			i += len
+		default:
+			return fmt.Errorf("unexpected byte %#x at location %d", b, i)
+		}
+	}
+	return nil
+}
+
+func (d *Dive) parseTimeseries(data []byte) (n int, err error) {
 	const interval = 4 * time.Second
 
 	state := DataPoint{
@@ -144,8 +229,13 @@ func (d *Dive) parseTimeseries(data []byte) error {
 	// MinTemperature and MaxTemperature fields to scale the fields correctly.
 	var minTemp, maxTemp, currTemp int
 
+	// ret contains the bytes that were read. Set when a 0xFB byte is read.
+	var ret int
+
 BYTE:
-	for i, b := range data {
+	for i := 0; i < len(data); i++ {
+		b := data[i]
+
 		switch {
 		case b&0xf0 == 0xb0:
 			raw := uint8(b & 0x0f)
@@ -161,9 +251,12 @@ BYTE:
 			}
 
 			state.Temperature = float64(currTemp)
-		case b == 0xC1:
-			d.Profile = append(d.Profile, state)
-			state.Time = state.Time.Add(interval)
+		case b&0xf0 == 0xc0:
+			n := int(b & 0x0f)
+			for i := 0; i < n; i++ {
+				d.Profile = append(d.Profile, state)
+				state.Time = state.Time.Add(interval)
+			}
 		case b&0xf0 == 0xe0:
 			if b&0x02 != 0 {
 				state.Alert = true
@@ -184,9 +277,10 @@ BYTE:
 				state.Bookmark = false
 			}
 		case b == 0xfb:
+			ret = i
 			break BYTE
 		case b&0x80 != 0:
-			fmt.Printf("Unknown control byte: %#02X (i = %d)\n", b, i)
+			fmt.Printf("Unknown control byte: %#02X\n", b)
 		default:
 			diff := parseDepthDiff(b)
 
@@ -205,7 +299,7 @@ BYTE:
 		}
 	}
 
-	return nil
+	return ret, nil
 }
 
 func parseTime(data []byte) time.Time {
@@ -214,10 +308,14 @@ func parseTime(data []byte) time.Time {
 	t = timeOffset + t/2
 
 	// offset is the time-zone offset in 15m increments.
-	offset := int(binary.LittleEndian.Uint16(data[8:12]))
+	offset := int(binary.LittleEndian.Uint16(data[8:10]))
 	offset *= 900 // 15 min
 
 	return time.Unix(t, 0).In(time.FixedZone("Device/Local", offset))
+}
+
+func parseDurationMin(d uint16) time.Duration {
+	return time.Duration(d) * time.Minute
 }
 
 func parseTemperature(t uint16) float64 {

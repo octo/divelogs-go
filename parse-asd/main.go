@@ -24,41 +24,35 @@ func main() {
 		log.Fatal(err)
 	}
 
-	delim := []byte{0x61, 0x2c, 0x69, 0x04}
-	var offsets []int
-
-	for i := 0; i < len(data)-len(delim); i++ {
-		if !bytes.Equal(data[i:i+len(delim)], delim) {
-			continue
-		}
-		offsets = append(offsets, i-8)
+	r := bytes.NewReader(data)
+	hdr, err := smarttrak.ReadHeader(r)
+	if err != nil {
+		log.Fatal(err)
 	}
+	fmt.Printf("Logbook name: %q\n", hdr.Name)
 
-	var diveData [][]byte
-	for i := 1; i < len(offsets); i++ {
-		firstByte := offsets[i]
-		lastByte := len(data)
-		if i < len(offsets)-1 {
-			lastByte = offsets[i+1]
-		}
-
-		diveData = append(diveData, data[firstByte:lastByte])
+	dv, err := smarttrak.ReadDive(r)
+	if err != nil {
+		log.Fatal(err)
 	}
+	fmt.Printf("DeviceID:    %#08x\n", dv.DeviceID)
+	fmt.Printf("Time:        %v\n", dv.Time)
+	fmt.Printf("Sequence:    %d\n", dv.Sequence)
+	fmt.Printf("Air temp:    %.1f\n", dv.AirTemperature)
+	fmt.Printf("Time limit:  %v\n", dv.TimeLimit)
+	fmt.Printf("Max depth:   %.1f\n", dv.MaxDepth)
+	fmt.Printf("Duration:    %v\n", dv.Duration)
+	fmt.Printf("Min temp:    %.1f\n", dv.MinTemperature)
+	fmt.Printf("Surface Int: %v\n", dv.SurfaceInterval)
+	fmt.Printf("Pres. Start: %.1f\n", dv.PressureStart)
+	fmt.Printf("Pres. End:   %.1f\n", dv.PressureEnd)
 
-	for i, data := range diveData {
-		fmt.Printf("=== Dive #%d, starting at %#04x ===\n", i+1, offsets[i+1])
+	fmt.Printf("Main info: Date: %s; Sequence: %d; Duration: %s;\n",
+		dv.Time, dv.Sequence, dv.Duration)
+	fmt.Printf("Temperatures: Min: %.1f; Max: %.1f; Deco: %.1f; Air: %.1f;\n",
+		dv.MinTemperature, dv.MaxTemperature, dv.DecoTemperature, dv.AirTemperature)
+	fmt.Printf("Depths: Average: %.1f; Max: %.1f;\n",
+		dv.AverageDepth, dv.MaxDepth)
 
-		dive, err := smarttrak.ParseDive(data)
-		if err != nil {
-			log.Println("error parsing dive:", err)
-			continue
-		}
-
-		fmt.Printf("Main info: Date: %s; Sequence: %d; Duration: %s;\n",
-			dive.Time, dive.Sequence, dive.Duration)
-		fmt.Printf("Temperatures: Min: %.1f; Max: %.1f; Deco: %.1f; Air: %.1f;\n",
-			dive.MinTemperature, dive.MaxTemperature, dive.DecoTemperature, dive.AirTemperature)
-		fmt.Printf("Depths: Average: %.1f; Max: %.1f;\n",
-			dive.AverageDepth, dive.MaxDepth)
-	}
+	fmt.Printf("Calculated start temp: %.1f\n", dv.Profile[0].Temperature)
 }
