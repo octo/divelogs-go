@@ -1,0 +1,32 @@
+<html>
+    <head>
+        <title>Dive details</title>
+    </head>
+    <body>
+        <H1>Dive details</H1>
+        <ul>
+            <li>Time and date: {{.Time}}</li>
+            <li>Sequence: {{.Sequence}}</li>
+            <li>Duration: {{.Duration}}</li>
+            <li>Temperature:
+                {{printf "%.1f" .MinTemperature}}&nbsp;°C min,
+                {{printf "%.1f" .MaxTemperature}}&nbsp;°C max,
+                {{printf "%.1f" .DecoTemperature}}&nbsp;°C deco,
+                {{printf "%.1f" .AirTemperature}}&nbsp;°C air
+            </li>
+            <li>Depth:
+                {{printf "%.1f" .AverageDepth}}&nbsp;m average,
+                {{printf "%.1f" .MaxDepth}}&nbsp;m max
+            </li>
+        </ul>
+    </body>
+
+    <!--
+    fmt.Printf("Main info: Date: %s; Sequence: %d; Duration: %s;\n",
+		dv.Time, dv.Sequence, dv.Duration)
+	fmt.Printf("Temperatures: Min: %.1f; Max: %.1f; Deco: %.1f; Air: %.1f;\n",
+		dv.MinTemperature, dv.MaxTemperature, dv.DecoTemperature, dv.AirTemperature)
+	fmt.Printf("Depths: Average: %.1f; Max: %.1f;\n",
+		dv.AverageDepth, dv.MaxDepth)
+    -->
+</html>
