@@ -67,17 +67,17 @@ func (d Data) MarshalXML(enc *xml.Encoder, start xml.StartElement) error {
 		SurfaceDuration:     int(math.Round(float64(d.SurfaceDuration.Seconds()))),
 		MaxDepth:            d.MaxDepth,
 		MeanDepth:           d.MeanDepth,
-		Location:            d.Location,
-		Site:                d.Site,
-		Weather:             d.Weather,
-		Visibility:          d.Visibility,
+		Location:            cdataString(d.Location),
+		Site:                cdataString(d.Site),
+		Weather:             cdataString(d.Weather),
+		Visibility:          cdataString(d.Visibility),
 		AirTemperature:      d.AirTemperature,
 		MaxDepthTemperature: d.MaxDepthTemperature,
 		DiveEndTemperature:  d.DiveEndTemperature,
-		Partner:             d.Partner,
-		Boat:                d.Boat,
-		CylinderName:        d.Cylinder.Name,
-		CylinderDescription: d.Cylinder.Description,
+		Partner:             cdataString(d.Partner),
+		Boat:                cdataString(d.Boat),
+		CylinderName:        cdataString(d.Cylinder.Name),
+		CylinderDescription: cdataString(d.Cylinder.Description),
 		CylinderDoubles: func(b bool) int {
 			if b {
 				return 1
@@ -91,7 +91,7 @@ func (d Data) MarshalXML(enc *xml.Encoder, start xml.StartElement) error {
 		Weight:                  d.Weight,
 		O2Percent:               d.O2Percent,
 		HEPercent:               d.HEPercent,
-		LogNotes:                d.LogNotes,
+		LogNotes:                cdataString(d.LogNotes),
 		Latitude:                d.Latitude,
 		Longitude:               d.Longitude,
 		ZoomLevel:               d.ZoomLevel,
@@ -116,18 +116,18 @@ func (d *Data) UnmarshalXML(dec *xml.Decoder, start xml.StartElement) error {
 		SurfaceDuration:     time.Duration(ephemeral.SurfaceDuration) * time.Second,
 		MaxDepth:            ephemeral.MaxDepth,
 		MeanDepth:           ephemeral.MeanDepth,
-		Location:            ephemeral.Location,
-		Site:                ephemeral.Site,
-		Weather:             ephemeral.Weather,
-		Visibility:          ephemeral.Visibility,
+		Location:            string(ephemeral.Location),
+		Site:                string(ephemeral.Site),
+		Weather:             string(ephemeral.Weather),
+		Visibility:          string(ephemeral.Visibility),
 		AirTemperature:      ephemeral.AirTemperature,
 		MaxDepthTemperature: ephemeral.MaxDepthTemperature,
 		DiveEndTemperature:  ephemeral.DiveEndTemperature,
-		Partner:             ephemeral.Partner,
-		Boat:                ephemeral.Boat,
+		Partner:             string(ephemeral.Partner),
+		Boat:                string(ephemeral.Boat),
 		Cylinder: Cylinder{
-			Name:            ephemeral.CylinderName,
-			Description:     ephemeral.CylinderDescription,
+			Name:            string(ephemeral.CylinderName),
+			Description:     string(ephemeral.CylinderDescription),
 			Size:            ephemeral.CylinderSize,
 			StartPressure:   ephemeral.CylinderStartPressure,
 			EndPressure:     ephemeral.CylinderEndPressure,
@@ -136,7 +136,7 @@ func (d *Data) UnmarshalXML(dec *xml.Decoder, start xml.StartElement) error {
 		Weight:         ephemeral.Weight,
 		O2Percent:      ephemeral.O2Percent,
 		HEPercent:      ephemeral.HEPercent,
-		LogNotes:       ephemeral.LogNotes,
+		LogNotes:       string(ephemeral.LogNotes),
 		Latitude:       ephemeral.Latitude,
 		Longitude:      ephemeral.Longitude,
 		ZoomLevel:      ephemeral.ZoomLevel,
@@ -157,38 +157,48 @@ func (d *Data) UnmarshalXML(dec *xml.Decoder, start xml.StartElement) error {
 
 // data is an internal version of Data used for XML [un]marshalling
 type data struct {
-	XMLName                 struct{} `xml:"DIVELOGSDATA"`
-	ID                      int      `xml:"DIVELOGSID"`
-	DiveNumber              int      `xml:"DIVELOGSDIVENUMBER"`
-	Date                    string   `xml:"DATE"`
-	Time                    string   `xml:"TIME"`
-	DiveTimeSec             int      `xml:"DIVETIMESEC"`
-	SurfaceDuration         int      `xml:"SURFACETIME"`
-	MaxDepth                float64  `xml:"MAXDEPTH"`
-	MeanDepth               float64  `xml:"MEANDEPTH"`
-	Location                string   `xml:"LOCATION"`
-	Site                    string   `xml:"SITE"`
-	Weather                 string   `xml:"WEATHER"`
-	Visibility              string   `xml:"WATERVIZIBILITY"` // sic
-	AirTemperature          float64  `xml:"AIRTEMP"`
-	MaxDepthTemperature     float64  `xml:"WATERTEMPMAXDEPTH"`
-	DiveEndTemperature      float64  `xml:"WATERTEMPATEND"`
-	Partner                 string   `xml:"PARTNER"`
-	Boat                    string   `xml:"BOATNAME"`
-	CylinderName            string   `xml:"CYLINDERNAME"`
-	CylinderDescription     string   `xml:"CYLINDERDESCRIPTION"`
-	CylinderDoubles         int      `xml:"DBLTANK"`
-	CylinderSize            float64  `xml:"CYLINDERSIZE"`
-	CylinderStartPressure   float64  `xml:"CYLINDERSTARTPRESSURE"`
-	CylinderEndPressure     float64  `xml:"CYLINDERENDPRESSURE"`
-	CylinderWorkingPressure float64  `xml:"WORKINGPRESSURE"`
-	Weight                  float64  `xml:"WEIGHT"`
-	O2Percent               float64  `xml:"O2PCT"`
-	HEPercent               float64  `xml:"HEPCT"`
-	LogNotes                string   `xml:"LOGNOTES"`
-	Latitude                float64  `xml:"LAT"`
-	Longitude               float64  `xml:"LNG"`
-	ZoomLevel               int      `xml:"GOOGLEMAPSZOOMLEVEL"`
-	SampleIntervalSec       int      `xml:"SAMPLEINTERVAL"`
-	Samples                 []Sample `xml:"SAMPLE"`
+	XMLName                 struct{}    `xml:"DIVELOGSDATA"`
+	ID                      int         `xml:"DIVELOGSID"`
+	DiveNumber              int         `xml:"DIVELOGSDIVENUMBER"`
+	Date                    string      `xml:"DATE"`
+	Time                    string      `xml:"TIME"`
+	DiveTimeSec             int         `xml:"DIVETIMESEC"`
+	SurfaceDuration         int         `xml:"SURFACETIME"`
+	MaxDepth                float64     `xml:"MAXDEPTH"`
+	MeanDepth               float64     `xml:"MEANDEPTH"`
+	Location                cdataString `xml:"LOCATION,omitempty"`
+	Site                    cdataString `xml:"SITE,omitempty"`
+	Weather                 cdataString `xml:"WEATHER,omitempty"`
+	Visibility              cdataString `xml:"WATERVIZIBILITY,omitempty"` // sic
+	AirTemperature          float64     `xml:"AIRTEMP"`
+	MaxDepthTemperature     float64     `xml:"WATERTEMPMAXDEPTH"`
+	DiveEndTemperature      float64     `xml:"WATERTEMPATEND"`
+	Partner                 cdataString `xml:"PARTNER,omitempty"`
+	Boat                    cdataString `xml:"BOATNAME,omitempty"`
+	CylinderName            cdataString `xml:"CYLINDERNAME,omitempty"`
+	CylinderDescription     cdataString `xml:"CYLINDERDESCRIPTION,omitempty"`
+	CylinderDoubles         int         `xml:"DBLTANK"`
+	CylinderSize            float64     `xml:"CYLINDERSIZE"`
+	CylinderStartPressure   float64     `xml:"CYLINDERSTARTPRESSURE"`
+	CylinderEndPressure     float64     `xml:"CYLINDERENDPRESSURE"`
+	CylinderWorkingPressure float64     `xml:"WORKINGPRESSURE"`
+	Weight                  float64     `xml:"WEIGHT"`
+	O2Percent               float64     `xml:"O2PCT"`
+	HEPercent               float64     `xml:"HEPCT"`
+	LogNotes                cdataString `xml:"LOGNOTES,omitempty"`
+	Latitude                float64     `xml:"LAT,omitempty"`
+	Longitude               float64     `xml:"LNG,omitempty"`
+	ZoomLevel               int         `xml:"GOOGLEMAPSZOOMLEVEL"`
+	SampleIntervalSec       int         `xml:"SAMPLEINTERVAL"`
+	Samples                 []Sample    `xml:"SAMPLE"`
+}
+
+type cdataString string
+
+func (s cdataString) MarshalXML(enc *xml.Encoder, start xml.StartElement) error {
+	wrapped := struct {
+		CData string `xml:",cdata"`
+	}{string(s)}
+
+	return enc.EncodeElement(wrapped, start)
 }

@@ -77,6 +77,7 @@ func TestMarshal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Logf("xml.Marshal(want) = %q", string(data))
 
 	var got Data
 	if err := xml.Unmarshal(data, &got); err != nil {
