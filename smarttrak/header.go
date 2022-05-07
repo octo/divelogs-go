@@ -13,10 +13,12 @@ type Header struct {
 }
 
 func ReadHeader(r io.Reader) (*Header, error) {
-	var magic [4]byte
-	_, err := r.Read(magic[:])
+	magic, err := readExact(r, 4)
 	if err != nil {
 		return nil, err
+	}
+	if !bytes.Equal(magic, []byte{0x07, 0x00, 0x10, 0x00}) {
+		return nil, fmt.Errorf("not an ASD file")
 	}
 
 	// skip 16 bytes "CTravelTrakCEDoc "
@@ -107,7 +109,7 @@ func readExact(r io.Reader, length int) ([]byte, error) {
 			return nil, err
 		}
 		if n == 0 {
-			return nil, io.EOF
+			return nil, fmt.Errorf("got %d bytes, want %d: %w", read, length, io.EOF)
 		}
 		read += n
 	}
